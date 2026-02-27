@@ -1,0 +1,185 @@
+CREATE database corra_por_voce;
+use corra_por_voce;
+CREATE TABLE usuarios (
+    id SERIAL PRIMARY KEY,
+    nome VARCHAR(100),
+    altura DECIMAL(3, 2) -- Ex: 1.75
+);
+
+
+CREATE TABLE atividades (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nome VARCHAR(100),
+    usuario_id INTEGER,
+    tipo VARCHAR(20), -- 'Corrida' ou 'Caminhada'
+    distancia DECIMAL(5, 2), 
+    duracao TIME, -- No MySQL usamos TIME para durações de até 838 horas
+    data_treino DATETIME DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_usuario_atividades FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+);
+
+CREATE TABLE medicoes_peso (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    usuario_id INTEGER,
+    nome VARCHAR(100),
+    peso DECIMAL(5, 2),
+    data_medicao DATE DEFAULT (CURRENT_DATE), -- No MySQL 8.0+ usa-se parênteses
+    CONSTRAINT fk_usuario_peso FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+);
+
+INSERT INTO usuarios (nome, altura) 
+VALUES ('Seu Nome', 1.75);
+
+-- Uma corrida de 5km em 30 minutos
+INSERT INTO atividades (usuario_id, tipo, distancia, duracao) 
+VALUES (1, 'Corrida', 5.00, '00:30:00');
+
+-- Uma caminhada de 3.5km em 45 minutos
+INSERT INTO atividades (usuario_id, tipo, distancia, duracao) 
+VALUES (1, 'Caminhada', 3.50, '00:45:00');
+
+-- Peso inicial
+INSERT INTO medicoes_peso (usuario_id, peso, data_medicao) 
+VALUES (1, 80.5, '2026-02-01');
+
+-- Peso após alguns treinos
+INSERT INTO medicoes_peso (usuario_id, peso, data_medicao) 
+VALUES (1, 79.2, '2026-02-15');
+
+SELECT 
+    tipo, 
+    SUM(distancia) AS total_km, 
+    SEC_TO_TIME(SUM(TIME_TO_SEC(duracao))) AS tempo_total 
+FROM atividades 
+WHERE usuario_id = 1 
+GROUP BY tipo;
+
+DROP TABLE IF EXISTS atividades;
+DROP TABLE IF EXISTS medicoes_peso;
+DROP TABLE IF EXISTS usuarios;
+
+-- Criar tabela de usuários
+CREATE TABLE usuarios (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nome VARCHAR(100),
+    altura DECIMAL(3, 2)
+);
+
+-- Criar tabela de atividades (Corrida/Caminhada)
+CREATE TABLE atividades (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    usuario_id INT,
+    nome VARCHAR(100),
+    tipo VARCHAR(20),
+    distancia DECIMAL(5, 2), 
+    duracao TIME,
+    data_treino DATETIME DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_usuario_atividades FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+);
+
+-- Criar tabela de peso
+CREATE TABLE medicoes_peso (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nome VARCHAR(100),
+    usuario_id INT,
+    peso DECIMAL(5, 2),
+    data_medicao DATE DEFAULT (CURRENT_DATE),
+    CONSTRAINT fk_usuario_peso FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+);
+
+-- 1. Inserir você
+INSERT INTO usuarios (nome, altura) VALUES ('Seu Nome', 1.75);
+
+-- 2. Inserir uma corrida (ID 1 assume que você é o primeiro usuário)
+INSERT INTO atividades (usuario_id, tipo, distancia, duracao) 
+VALUES (1, 'Corrida', 5.00, '00:30:00');
+
+-- 3. Inserir uma pesagem
+INSERT INTO medicoes_peso (usuario_id, peso) 
+VALUES (1, 80.5);
+
+-- Inserindo o perfil (ajuste seu nome e altura se desejar)
+INSERT INTO usuarios (nome, altura) 
+VALUES ('Atleta Senior', 1.80);
+
+-- Registrando o peso de duas semanas atrás e o de hoje
+INSERT INTO medicoes_peso (usuario_id, peso, data_medicao) 
+VALUES (1, 85.00, '2026-02-11');
+
+INSERT INTO medicoes_peso (usuario_id, peso, data_medicao) 
+VALUES (1, 83.50, '2026-02-25');
+
+-- Caminhada de 3km para aquecer
+INSERT INTO atividades (usuario_id, tipo, distancia, duracao, data_treino) 
+VALUES (1, 'Caminhada', 3.00, '00:35:00', '2026-02-24 08:00:00');
+
+-- Corrida de 5km
+INSERT INTO atividades (usuario_id, tipo, distancia, duracao, data_treino) 
+VALUES (1, 'Corrida', 5.00, '00:28:30', '2026-02-25 07:30:00');
+
+SELECT 
+    tipo,
+    COUNT(*) AS total_treinos,
+    SUM(distancia) AS km_totais,
+    -- Cálculo do Pace Médio (Minutos por Quilômetro)
+    SEC_TO_TIME(SUM(TIME_TO_SEC(duracao)) / SUM(distancia)) AS pace_medio
+FROM atividades
+WHERE usuario_id = 1
+GROUP BY tipo;
+
+CREATE OR REPLACE VIEW v_resumo_treinos AS
+SELECT 
+    u.nome AS atleta,
+    a.tipo,
+    COUNT(a.id) AS qtd_treinos,
+    SUM(a.distancia) AS km_totais,
+    SEC_TO_TIME(SUM(TIME_TO_SEC(a.duracao))) AS tempo_total,
+    -- Calcula o Pace (Tempo médio por KM)
+    SEC_TO_TIME(SUM(TIME_TO_SEC(a.duracao)) / SUM(a.distancia)) AS pace_medio
+FROM atividades a
+JOIN usuarios u ON a.usuario_id = u.id
+GROUP BY u.nome, a.tipo;
+
+CREATE OR REPLACE VIEW v_historico_imc AS
+SELECT 
+    u.nome,
+    m.peso,
+    u.altura,
+    ROUND(m.peso / (u.altura * u.altura), 2) AS imc,
+    m.data_medicao
+FROM medicoes_peso m
+JOIN usuarios u ON m.usuario_id = u.id;
+
+DELIMITER $$
+
+CREATE TRIGGER tg_valida_peso
+BEFORE INSERT ON medicoes_peso
+FOR EACH ROW
+BEGIN
+    IF NEW.peso <= 0 OR NEW.peso > 400 THEN
+        SIGNAL SQLSTATE '45000' 
+        SET MESSAGE_TEXT = 'Erro: Peso inserido está fora dos limites realistas (0-400kg).';
+    END IF;
+END$$
+
+DELIMITER ;
+
+SELECT * FROM v_resumo_treinos;
+
+SELECT * FROM v_historico_imc ORDER BY data_medicao DESC;
+
+SELECT * FROM v_resumo_treinos;
+
+SELECT * FROM v_historico_imc;
+
+SELECT 
+    u.nome,
+    (SELECT peso FROM medicoes_peso WHERE usuario_id = u.id ORDER BY data_medicao ASC LIMIT 1) AS peso_inicial,
+    (SELECT peso FROM medicoes_peso WHERE usuario_id = u.id ORDER BY data_medicao DESC LIMIT 1) AS peso_atual,
+    (SELECT peso FROM medicoes_peso WHERE usuario_id = u.id ORDER BY data_medicao DESC LIMIT 1) - 
+    (SELECT peso FROM medicoes_peso WHERE usuario_id = u.id ORDER BY data_medicao ASC LIMIT 1) AS diferenca_total
+FROM usuarios u
+WHERE u.id = 1;
+
+select * from usuarios;
+
